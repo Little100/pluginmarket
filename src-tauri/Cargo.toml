@@ -1,6 +1,6 @@
 [package]
 name = "mc-plugin-market"
-version = "0.1.0"
+version = "1.0.1"
 description = "MC 插件市场 - Minecraft 插件聚合搜索工具"
 authors = ["you"]
 edition = "2021"

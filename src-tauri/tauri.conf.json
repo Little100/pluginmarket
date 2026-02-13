@@ -1,6 +1,6 @@
 {
   "productName": "MC-Plugin-Market",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "identifier": "com.mc-plugin-market.app",
   "build": {
     "beforeDevCommand": "npm run dev",
