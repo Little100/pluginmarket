@@ -35,14 +35,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "cmd",
-          "cmd": "cmd",
-          "args": true
-        }
-      ]
+      "open": true
     }
   }
 }
