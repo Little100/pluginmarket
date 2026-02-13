@@ -106,13 +106,13 @@ export default function MainPage() {
       const p = randomPage
 
       if (enabledPlatforms.includes('spigot')) {
-        promises.push(getSpigetPopularResources(p, 10).then(r => results.push(...r)).catch(() => {}))
+        promises.push(getSpigetPopularResources(p, 10).then(r => { results.push(...r) }).catch(() => {}))
       }
       if (enabledPlatforms.includes('hangar')) {
-        promises.push(getHangarPopular((p - 1) * 10, 10).then(r => results.push(...r)).catch(() => {}))
+        promises.push(getHangarPopular((p - 1) * 10, 10).then(r => { results.push(...r) }).catch(() => {}))
       }
       if (enabledPlatforms.includes('modrinth')) {
-        promises.push(getModrinthPopular((p - 1) * 10, 10).then(r => results.push(...r)).catch(() => {}))
+        promises.push(getModrinthPopular((p - 1) * 10, 10).then(r => { results.push(...r) }).catch(() => {}))
       }
 
       await Promise.all(promises)

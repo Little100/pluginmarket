@@ -8,8 +8,8 @@ import { isAIAvailable, chatCompletionWithTools, ConcurrencyLimitError, type Too
 import { searchAll } from '@/services/search'
 import type { ChatMessage, PluginBase } from '@/types'
 
-// 插件文档模块 - 使用 Vite 的 import.meta.glob 动态导入
-const pluginDocs = import.meta.glob('@/assets/docs/plugins/*.md', { query: '?raw', import: 'default' })
+// 插件文档模块 - 使用 Vite 的 import.meta.glob 动态导入（使用相对路径）
+const pluginDocs = import.meta.glob('../assets/docs/plugins/*.md', { query: '?raw', import: 'default' })
 
 // 插件文档列表（文件名和标题）
 const pluginDocList = [

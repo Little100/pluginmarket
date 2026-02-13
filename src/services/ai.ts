@@ -191,6 +191,16 @@ export async function chatCompletion(
   }
 }
 
+// JSON Schema 属性类型
+export interface JSONSchemaProperty {
+  type: string
+  description?: string
+  enum?: string[]
+  items?: JSONSchemaProperty
+  properties?: Record<string, JSONSchemaProperty>
+  required?: string[]
+}
+
 // Tool 定义类型
 export interface ToolDefinition {
   type: 'function'
@@ -199,12 +209,7 @@ export interface ToolDefinition {
     description: string
     parameters: {
       type: 'object'
-      properties: Record<string, {
-        type: string
-        description?: string
-        enum?: string[]
-        items?: { type: string }
-      }>
+      properties: Record<string, JSONSchemaProperty>
       required?: string[]
     }
   }

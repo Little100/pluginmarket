@@ -559,15 +559,19 @@ function TranslatePreset() {
   )
 }
 
-// 预加载所有文档的 raw 内容
-const docModules = import.meta.glob('/src/assets/docs/**/*.md', { query: '?raw', import: 'default' })
+// 预加载所有文档的 raw 内容 - 使用相对路径
+const docModules = import.meta.glob('../assets/docs/**/*.md', { query: '?raw', import: 'default', eager: false })
 
 // 加载文档内容
 async function loadDoc(path: string): Promise<string> {
-  const fullPath = `/src/assets/docs/${path}`
-  const loader = docModules[fullPath]
-  if (!loader) return `文档 ${path} 未找到`
-  return await loader() as string
+  // 遍历所有模块查找匹配的路径
+  for (const [key, loader] of Object.entries(docModules)) {
+    if (key.endsWith(path) || key.includes(`/${path}`)) {
+      return await loader() as string
+    }
+  }
+  
+  return `文档 ${path} 未找到`
 }
 
 // 文档索引（提供给 AI 的系统提示中）
