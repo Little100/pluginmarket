@@ -615,16 +615,214 @@ export async function translatePluginInfos(
 // 文本段落信息
 interface TextSegment {
   index: number       // 在原始内容中的位置
-  text: string        // 纯文本内容
-  original: string    // 原始内容（可能包含 HTML）
+  text: string        // 需要翻译的文本内容
+  original: string    // 原始内容
   isTranslatable: boolean  // 是否需要翻译
+  prefix: string      // 前缀（如 YAML key、JSON key 等）
+  suffix: string      // 后缀（如引号、逗号等）
+}
+
+// 检测内容类型
+function detectContentType(content: string): 'yaml' | 'json' | 'properties' | 'html' | 'markdown' | 'text' {
+  const trimmed = content.trim()
+  
+  // JSON 检测
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      JSON.parse(trimmed)
+      return 'json'
+    } catch {
+      // 不是有效 JSON
+    }
+  }
+  
+  // YAML 检测（包含 key: value 格式）
+  if (/^[\w-]+:\s*[^\n]*$/m.test(trimmed) && !/<[^>]+>/.test(trimmed)) {
+    return 'yaml'
+  }
+  
+  // Properties 文件检测（key=value 格式）
+  if (/^[\w.-]+=.+$/m.test(trimmed)) {
+    return 'properties'
+  }
+  
+  // HTML 检测
+  if (/<[^>]+>/.test(trimmed)) {
+    return 'html'
+  }
+  
+  // Markdown 检测
+  if (/^#{1,6}\s|^\*\*|^-\s|^\d+\.\s|^```/.test(trimmed)) {
+    return 'markdown'
+  }
+  
+  return 'text'
+}
+
+// 从 YAML 内容中提取可翻译的文本段落
+function extractYamlSegments(content: string): TextSegment[] {
+  const segments: TextSegment[] = []
+  const lines = content.split('\n')
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    
+    // 跳过空行
+    if (!trimmed) {
+      segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+      continue
+    }
+    
+    // 跳过注释
+    if (trimmed.startsWith('#')) {
+      segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+      continue
+    }
+    
+    // 跳过纯结构行（只有 key: 没有值，或者是列表项 -）
+    if (/^[\w-]+:\s*$/.test(trimmed) || trimmed === '-') {
+      segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+      continue
+    }
+    
+    // 匹配 key: "value" 或 key: 'value' 格式（语言文件常见格式）
+    const quotedMatch = trimmed.match(/^([\w.-]+:\s*)(["'])(.+)\2(\s*,?\s*)$/)
+    if (quotedMatch) {
+      const [, prefix, quote, text, suffix] = quotedMatch
+      // 检查是否是英文或需要翻译的内容
+      if (/[a-zA-Z]/.test(text) && !/^[a-z0-9_.-]+$/i.test(text)) {
+        segments.push({
+          index: i,
+          text,
+          original: line,
+          isTranslatable: true,
+          prefix: prefix + quote,
+          suffix: quote + suffix
+        })
+        continue
+      }
+    }
+    
+    // 匹配 key: value 格式（无引号）
+    const unquotedMatch = trimmed.match(/^([\w.-]+:\s*)(.+)$/)
+    if (unquotedMatch) {
+      const [, prefix, text] = unquotedMatch
+      // 跳过纯数字、布尔值、null 等
+      if (/^(true|false|null|undefined|\d+\.?\d*|0x[0-9a-f]+)$/i.test(text.trim())) {
+        segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+        continue
+      }
+      // 跳过看起来像路径或 URL 的内容
+      if (/^[\/\\]|^https?:|^[a-z]:[\/\\]/i.test(text.trim())) {
+        segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+        continue
+      }
+      // 检查是否包含英文字母（需要翻译）
+      if (/[a-zA-Z]/.test(text)) {
+        segments.push({
+          index: i,
+          text: text.trim(),
+          original: line,
+          isTranslatable: true,
+          prefix,
+          suffix: ''
+        })
+        continue
+      }
+    }
+    
+    // 匹配列表项 - "value" 或 - value
+    const listMatch = trimmed.match(/^(-\s*)(["']?)(.+?)\2(\s*,?\s*)$/)
+    if (listMatch) {
+      const [, prefix, quote, text, suffix] = listMatch
+      if (/[a-zA-Z]/.test(text) && !/^[a-z0-9_.-]+$/i.test(text)) {
+        segments.push({
+          index: i,
+          text,
+          original: line,
+          isTranslatable: true,
+          prefix: prefix + quote,
+          suffix: quote + suffix
+        })
+        continue
+      }
+    }
+    
+    // 默认不翻译
+    segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+  }
+  
+  return segments
+}
+
+// 从 JSON 内容中提取可翻译的文本段落
+function extractJsonSegments(content: string): TextSegment[] {
+  const segments: TextSegment[] = []
+  const lines = content.split('\n')
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+    
+    // 跳过空行
+    if (!trimmed) {
+      segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+      continue
+    }
+    
+    // 跳过纯结构字符
+    if (/^[{}\[\],]+$/.test(trimmed)) {
+      segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+      continue
+    }
+    
+    // 匹配 "key": "value" 格式
+    const kvMatch = trimmed.match(/^("[\w.-]+"\s*:\s*)(")(.+?)(",?\s*)$/)
+    if (kvMatch) {
+      const [, prefix, , text, suffix] = kvMatch
+      // 检查是否需要翻译（包含英文字母且不是纯标识符）
+      if (/[a-zA-Z]/.test(text) && !/^[a-z0-9_.-]+$/i.test(text)) {
+        segments.push({
+          index: i,
+          text,
+          original: line,
+          isTranslatable: true,
+          prefix: prefix + '"',
+          suffix: '"' + suffix.slice(1)
+        })
+        continue
+      }
+    }
+    
+    // 匹配数组中的字符串 "value"
+    const arrayMatch = trimmed.match(/^(")(.+?)(",?\s*)$/)
+    if (arrayMatch) {
+      const [, , text, suffix] = arrayMatch
+      if (/[a-zA-Z]/.test(text) && !/^[a-z0-9_.-]+$/i.test(text)) {
+        segments.push({
+          index: i,
+          text,
+          original: line,
+          isTranslatable: true,
+          prefix: '"',
+          suffix: '"' + suffix.slice(1)
+        })
+        continue
+      }
+    }
+    
+    // 默认不翻译
+    segments.push({ index: i, text: '', original: line, isTranslatable: false, prefix: '', suffix: '' })
+  }
+  
+  return segments
 }
 
 // 从 HTML/Markdown 内容中提取可翻译的文本段落
-function extractTextSegments(content: string): TextSegment[] {
+function extractHtmlMarkdownSegments(content: string): TextSegment[] {
   const segments: TextSegment[] = []
-  
-  // 按行分割
   const lines = content.split('\n')
   
   for (let i = 0; i < lines.length; i++) {
@@ -634,6 +832,8 @@ function extractTextSegments(content: string): TextSegment[] {
     // 判断是否需要翻译
     let isTranslatable = true
     let textContent = trimmed
+    let prefix = ''
+    let suffix = ''
     
     // 跳过空行
     if (!trimmed) {
@@ -659,6 +859,22 @@ function extractTextSegments(content: string): TextSegment[] {
     else if (/^\[.*\]\(.*\)$/.test(trimmed) || /^<a\s.*<\/a>$/i.test(trimmed)) {
       isTranslatable = false
     }
+    // 处理 Markdown 标题
+    else if (/^(#{1,6})\s+(.+)$/.test(trimmed)) {
+      const match = trimmed.match(/^(#{1,6}\s+)(.+)$/)
+      if (match) {
+        prefix = match[1]
+        textContent = match[2]
+      }
+    }
+    // 处理 Markdown 列表
+    else if (/^([-*+]\s+|\d+\.\s+)(.+)$/.test(trimmed)) {
+      const match = trimmed.match(/^([-*+]\s+|\d+\.\s+)(.+)$/)
+      if (match) {
+        prefix = match[1]
+        textContent = match[2]
+      }
+    }
     // 提取 HTML 中的文本
     else if (/<[^>]+>/.test(trimmed)) {
       textContent = trimmed.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -672,13 +888,32 @@ function extractTextSegments(content: string): TextSegment[] {
       text: textContent,
       original: line,
       isTranslatable,
+      prefix,
+      suffix
     })
   }
   
   return segments
 }
 
-// 流式翻译文档（使用用户提供的优化提示词）
+// 统一的文本段落提取函数
+function extractTextSegments(content: string): TextSegment[] {
+  const contentType = detectContentType(content)
+  
+  switch (contentType) {
+    case 'yaml':
+      return extractYamlSegments(content)
+    case 'json':
+      return extractJsonSegments(content)
+    case 'html':
+    case 'markdown':
+      return extractHtmlMarkdownSegments(content)
+    default:
+      return extractHtmlMarkdownSegments(content)
+  }
+}
+
+// 流式翻译文档（按行翻译，保留原始格式）
 export async function* translateDocumentStream(
   content: string,
   onProgress?: (progress: number) => void
@@ -697,85 +932,63 @@ export async function* translateDocumentStream(
   let completed = 0
   const total = translatableSegments.length
   
-  // 系统提示词（使用用户提供的优化版本）
-  const systemPrompt = `You are a professional 简体中文 native translator who needs to fluently translate text into 简体中文.
+  // 简化的系统提示词 - 按行翻译
+  const systemPrompt = `你是一个专业的简体中文翻译。你的任务是翻译给定的文本。
 
-## Translation Rules
-1. Output only the translated content, without explanations or additional content (such as "Here's the translation:" or "Translation as follows:")
-2. The returned translation must maintain exactly the same number of paragraphs and format as the original text
-3. If the text contains HTML tags, consider where the tags should be placed in the translation while maintaining fluency
-4. For content that should not be translated (such as proper nouns, code, etc.), keep the original text.
-5. If input contains %%, use %% in your output, if input has no %%, don't use %% in your output
+规则：
+1. 只输出翻译后的文本，不要任何解释或额外内容
+2. 保持原文的格式和风格
+3. 专有名词、代码、变量名等保持原文
+4. 如果输入包含 %%，输出也要包含 %%
+5. 多行输入时，每行翻译用 %% 分隔
 
-## OUTPUT FORMAT:
-- **Single paragraph input** → Output translation directly (no separators, no extra text)
-- **Multi-paragraph input** → Use %% as paragraph separator between translations
+示例：
+输入: This is a message
+输出: 这是一条消息
 
-## Examples
-### Multi-paragraph Input:
-Paragraph A
+输入: Hello World
 %%
-Paragraph B
+Welcome to the server
+输出: 你好世界
 %%
-Paragraph C
+欢迎来到服务器`
 
-### Multi-paragraph Output:
-Translation A
-%%
-Translation B
-%%
-Translation C
-
-### Single paragraph Input:
-Single paragraph content
-
-### Single paragraph Output:
-Direct translation without separators`
-
-  // 批量翻译（每批最多 10 个段落，利用 %% 分隔符）
+  // 批量翻译（每批最多 10 个段落）
   const batchSize = 10
   
   for (let i = 0; i < translatableSegments.length; i += batchSize) {
     const batch = translatableSegments.slice(i, i + batchSize)
     
-    // 组合批次文本
+    // 组合批次文本 - 使用 %% 分隔
     const batchText = batch.map(s => s.text).join('\n%%\n')
     
     await limiter.acquire()
     try {
       const response = await chatWithModel(model, [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Translate to 简体中文 (output translation only):\n\n${batchText}` },
+        { role: 'user', content: `翻译以下文本到简体中文（只输出翻译结果）:\n\n${batchText}` },
       ], { temperature: 0.2 })
       
       // 解析响应
       const translations = response.split(/\n?%%\n?/)
       
-      // 逐个返回翻译结果
+      // 逐个返回翻译结果，重新组装原始格式
       for (let j = 0; j < batch.length; j++) {
         const segment = batch[j]
         const translated = translations[j]?.trim() || segment.text
         
-        // 如果原始内容有 HTML 结构，尝试保留
-        let finalTranslated = translated
-        if (/<[^>]+>/.test(segment.original)) {
-          // 简单替换：用翻译后的文本替换原始 HTML 中的文本内容
-          // 这里采用简化策略：如果原始是纯 HTML 包裹的文本，保留 HTML 结构
-          const htmlMatch = segment.original.match(/^(\s*<[^>]+>)(.*)(<\/[^>]+>\s*)$/i)
-          if (htmlMatch) {
-            finalTranslated = `${htmlMatch[1]}${translated}${htmlMatch[3]}`
-          }
-        }
+        // 使用 prefix 和 suffix 重新组装完整行
+        // 保留原始行的缩进
+        const indentMatch = segment.original.match(/^(\s*)/)
+        const indent = indentMatch ? indentMatch[1] : ''
         
-        // 保留 Markdown 格式
-        const headingMatch = segment.original.match(/^(#{1,6})\s/)
-        if (headingMatch) {
-          finalTranslated = `${headingMatch[1]} ${finalTranslated}`
-        }
-        
-        const listMatch = segment.original.match(/^(\s*[-*+]\s|\s*\d+\.\s)/)
-        if (listMatch) {
-          finalTranslated = `${listMatch[1]}${finalTranslated}`
+        let finalTranslated: string
+        if (segment.prefix || segment.suffix) {
+          // 有 prefix/suffix 的情况（如 YAML key: value, JSON "key": "value"）
+          finalTranslated = indent + segment.prefix + translated + segment.suffix
+        } else {
+          // 普通文本，保留原始格式
+          finalTranslated = indent + translated
         }
         
         yield { index: segment.index, translated: finalTranslated }
