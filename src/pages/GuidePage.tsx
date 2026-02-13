@@ -955,7 +955,7 @@ function SimpleServerPreset() {
 
 // ==================== Agent 模式 ====================
 
-// Tauri API 辅助函数 - 使用 shell 插件执行命令
+// Tauri API 辅助函数 - 使用 fs 插件读取文件
 async function readServerFile(serverPath: string, filePath: string): Promise<string> {
   if (!isTauri) {
     return '错误: 此功能仅在 Tauri 桌面端可用'
@@ -964,18 +964,25 @@ async function readServerFile(serverPath: string, filePath: string): Promise<str
   const fullPath = `${serverPath}/${filePath}`.replace(/\//g, '\\')
   
   try {
-    // 使用 Tauri shell 插件执行 type 命令读取文件
-    const { Command } = await import('@tauri-apps/plugin-shell')
-    const command = Command.create('cmd', ['/c', 'type', fullPath])
-    const output = await command.execute()
-    
-    if (output.code === 0) {
-      return output.stdout
-    } else {
-      return `无法读取文件: ${filePath} - ${output.stderr || '文件不存在或无法访问'}`
+    // 优先使用 fs 插件
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    const content = await readTextFile(fullPath)
+    return content
+  } catch (fsError) {
+    // 如果 fs 插件失败，尝试使用 shell 插件
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell')
+      const command = Command.create('cmd', ['/c', 'type', fullPath])
+      const output = await command.execute()
+      
+      if (output.code === 0) {
+        return output.stdout
+      } else {
+        return `无法读取文件: ${filePath} - ${output.stderr || '文件不存在或无法访问'}`
+      }
+    } catch (shellError) {
+      return `无法读取文件: ${filePath} - fs错误: ${fsError}, shell错误: ${shellError}`
     }
-  } catch (e) {
-    return `无法读取文件: ${filePath} - ${e}`
   }
 }
 
@@ -987,20 +994,27 @@ async function listServerFiles(serverPath: string, dirPath: string): Promise<str
   const fullPath = (dirPath === '.' ? serverPath : `${serverPath}/${dirPath}`).replace(/\//g, '\\')
   
   try {
-    // 使用 Tauri shell 插件执行 dir 命令列出目录
-    const { Command } = await import('@tauri-apps/plugin-shell')
-    const command = Command.create('cmd', ['/c', 'dir', '/b', fullPath])
-    const output = await command.execute()
-    
-    if (output.code === 0) {
-      // 解析 dir /b 输出，每行一个文件名
-      const files = output.stdout.split('\n').map(f => f.trim()).filter(f => f.length > 0)
-      return files.length > 0 ? files : ['(空目录)']
-    } else {
-      return [`无法列出目录: ${output.stderr || '目录不存在或无法访问'}`]
+    // 优先使用 fs 插件
+    const { readDir } = await import('@tauri-apps/plugin-fs')
+    const entries = await readDir(fullPath)
+    const files = entries.map(entry => entry.name).filter((name): name is string => name !== undefined)
+    return files.length > 0 ? files : ['(空目录)']
+  } catch (fsError) {
+    // 如果 fs 插件失败，尝试使用 shell 插件
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell')
+      const command = Command.create('cmd', ['/c', 'dir', '/b', fullPath])
+      const output = await command.execute()
+      
+      if (output.code === 0) {
+        const files = output.stdout.split('\n').map(f => f.trim()).filter(f => f.length > 0)
+        return files.length > 0 ? files : ['(空目录)']
+      } else {
+        return [`无法列出目录: ${output.stderr || '目录不存在或无法访问'}`]
+      }
+    } catch (shellError) {
+      return [`无法列出目录: fs错误: ${fsError}, shell错误: ${shellError}`]
     }
-  } catch (e) {
-    return [`无法列出目录: ${e}`]
   }
 }
 
