@@ -1,0 +1,35 @@
+# Node.js
+node_modules/
+.npm
+.yarn
+
+# Vite 构建输出
+dist/
+
+# Tauri/Rust
+src-tauri/target/
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+.idea/
+
+# OS 文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+
+# TypeScript 缓存
+*.tsbuildinfo
+
+# 大文件（根目录字体文件，src/assets/ 下已有一份）
+/Minecraft-AE.ttf

@@ -1,0 +1,20 @@
+[package]
+name = "mc-plugin-market"
+version = "0.1.0"
+description = "MC 插件市场 - Minecraft 插件聚合搜索工具"
+authors = ["you"]
+edition = "2021"
+
+[lib]
+name = "mc_plugin_market_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
