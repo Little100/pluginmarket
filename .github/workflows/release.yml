@@ -51,6 +51,7 @@ jobs:
             libayatana-appindicator3-dev
 
       - name: Install npm dependencies
+        shell: bash
         run: |
           rm -f package-lock.json
           npm install
